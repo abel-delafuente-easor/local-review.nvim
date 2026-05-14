@@ -13,6 +13,7 @@ local M = {}
 
 local context = require("local_review.context")
 local positioning = require("local_review.positioning")
+local stale = require("local_review.stale")
 local storage = require("local_review.storage")
 
 local state = {
@@ -377,6 +378,19 @@ function M.get_line_state(bufnr, line)
   end
 
   return result
+end
+
+function M.count_stale_comments_in_scope(bufnr, threshold_seconds)
+  local resolved, err = scope_state_for_buffer(bufnr or 0)
+  if not resolved then
+    return nil, nil, err
+  end
+
+  local count, oldest_age = stale.count_comments_older_than(
+    comments_in_scope(resolved.ctx.scope_root),
+    threshold_seconds
+  )
+  return count, oldest_age, nil
 end
 
 function M.upsert_line_comment(line_state, body)

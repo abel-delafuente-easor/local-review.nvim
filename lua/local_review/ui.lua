@@ -5,6 +5,7 @@ local comments = require("local_review.comments")
 local namespace = vim.api.nvim_create_namespace("local-review-ui")
 local placeholder_namespace = vim.api.nvim_create_namespace("local-review-ui-placeholder")
 local placeholder_text = "Write a review comment..."
+local stale = require("local_review.stale")
 
 local state = {
   editor_bufnr = nil,
@@ -300,6 +301,26 @@ function M.open_current_line()
   local line_state = comments.get_line_state(source_bufnr, source_line)
   if not line_state then
     return
+  end
+
+  if not line_state.comment then
+    local threshold_seconds = require("local_review").get_opts().stale_comment_warning_after
+    if type(threshold_seconds) == "number" and threshold_seconds > 0 then
+      local count, oldest_age = comments.count_stale_comments_in_scope(source_bufnr, threshold_seconds)
+      if count and count > 0 then
+        local message = string.format(
+          "There %s %d review comment%s in this scope older than %s.",
+          count == 1 and "is" or "are",
+          count,
+          count == 1 and "" or "s",
+          stale.format_duration(threshold_seconds)
+        )
+        if oldest_age then
+          message = string.format("%s Oldest age: %s.", message, stale.format_duration(oldest_age))
+        end
+        vim.notify(message, vim.log.levels.WARN)
+      end
+    end
   end
 
   local lines = body_lines(line_state.comment and line_state.comment.body or "")

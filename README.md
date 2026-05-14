@@ -42,6 +42,7 @@ Use your preferred plugin manager. Example with `lazy.nvim`:
         { modes = { "n" }, key = "q" },
         { modes = { "n", "i" }, key = "<C-c>" },
       },
+      stale_comment_warning_after = 7 * 24 * 60 * 60,
     })
   end,
 }
@@ -73,6 +74,7 @@ end, { desc = "Local Review Picker" })
 ## Notes
 
 - The inline comment editor closes with `q` in normal mode and `<C-c>` in normal or insert mode by default. Configure those bindings through `comment_close_keys`, or remove entries to disable them.
+- Set `stale_comment_warning_after` to a number of seconds to warn about older unresolved comments when opening a brand-new comment editor. Leave it unset or `nil` to disable the warning entirely.
 - Comments are stored by scope root: repo root when inside git, otherwise the file's parent directory.
 - Export and clear can target either a file or a directory.
 - This was largely vibe-coded. There is likely some poor code and you may find bugs.

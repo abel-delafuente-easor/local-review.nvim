@@ -9,6 +9,7 @@ local defaults = {
     { modes = { "n" }, key = "q" },
     { modes = { "n", "i" }, key = "<C-c>" },
   },
+  stale_comment_warning_after = nil,
 }
 
 local state = {
