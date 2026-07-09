@@ -33,7 +33,7 @@ Omit path unless the user asks for a specific path.
 
 If the user invokes the skill without any additional instructions, read the comments
 and proceed as this were a code review.  Some comments may be questions, some may ask
-you to make concrete changes.
+you to make concrete changes. If the comment is a question, just answer it and work back and forth with the user.
 
 While responding to comments, ensure that you tell the user which comment you are
 responding to. This can be by listing all comments in a numbered list or by collating
