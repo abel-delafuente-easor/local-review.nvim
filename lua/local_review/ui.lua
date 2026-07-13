@@ -161,13 +161,19 @@ local function text_column_offset(winid)
   return vim.fn.getwininfo(winid)[1].textoff
 end
 
-local function inline_dimensions(lines, source_winid, anchor_row)
-  local win_width = vim.api.nvim_win_get_width(source_winid)
-  local max_width = math.min(120, math.max(60, win_width - text_column_offset(source_winid)))
-  local width = 60
-  for _, line in ipairs(lines) do
-    width = math.max(width, math.min(max_width, #line + 2))
+local function configured_width()
+  local width_config = require("local_review").get_opts().comment_box_width
+  if type(width_config) == "number" then
+    return math.max(1, math.floor(width_config))
   end
+
+  return 80
+end
+
+local function inline_dimensions(lines, source_winid, anchor_row)
+  local width = configured_width()
+  local win_width = vim.api.nvim_win_get_width(source_winid)
+  width = math.min(width, math.max(1, win_width - text_column_offset(source_winid)))
 
   local row = anchor_row or (vim.fn.winline() + 1)
   local available_height = math.max(6, vim.api.nvim_win_get_height(source_winid) - row - 1)
