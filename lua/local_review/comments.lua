@@ -546,7 +546,8 @@ function M.jump(direction)
   end
 end
 
-function M.clear_path(path)
+function M.clear_path(path, opts)
+  local silent = opts and opts.silent
   local comments_in_path, target_path, kind = M.list_comments_in_path(path)
   if not comments_in_path then
     vim.notify(target_path or "Failed to resolve comment scope.", vim.log.levels.WARN)
@@ -554,7 +555,9 @@ function M.clear_path(path)
   end
 
   if #comments_in_path == 0 then
-    vim.notify("No review comments found for the selected path.", vim.log.levels.INFO)
+    if not silent then
+      vim.notify("No review comments found for the selected path.", vim.log.levels.INFO)
+    end
     return
   end
 
@@ -579,7 +582,9 @@ function M.clear_path(path)
     end
   end
 
-  vim.notify("Cleared review comments for selected path.", vim.log.levels.INFO)
+  if not silent then
+    vim.notify("Cleared review comments for selected path.", vim.log.levels.INFO)
+  end
 end
 
 function M.clear_repo()

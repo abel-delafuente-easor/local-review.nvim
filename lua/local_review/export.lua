@@ -22,7 +22,7 @@ local function export_lines(path)
   if #path_comments == 0 then
     return {
       "No review comments found for the selected path.",
-    }
+    }, nil, 0
   end
 
   local lines = {
@@ -43,31 +43,38 @@ local function export_lines(path)
     lines[#lines + 1] = ""
   end
 
-  return lines
+  return lines, nil, #path_comments
 end
 
 function M.path_export_text(path)
-  local lines, err = export_lines(path)
+  local lines, err, comment_count = export_lines(path)
   if not lines then
     return nil, err
   end
 
-  return table.concat(lines, "\n")
+  return table.concat(lines, "\n"), nil, comment_count
 end
 
-function M.open_export(path)
+function M.open_export(path, opts)
   local export_path = path
   if export_path == nil or export_path == "" then
     export_path = context.default_export_root()
   end
 
-  local text, err = M.path_export_text(export_path)
+  local text, err, comment_count = M.path_export_text(export_path)
   if not text then
     vim.notify(err or "Failed to export review comments.", vim.log.levels.WARN)
     return
   end
 
   io.write(text .. "\n")
+  if opts and opts.clear_after_export and comment_count > 0 then
+    comments.clear_path(export_path, { silent = true })
+  end
+end
+
+function M.open_export_preserve(path)
+  M.open_export(path)
 end
 
 return M

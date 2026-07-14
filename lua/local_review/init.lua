@@ -64,7 +64,11 @@ function M.setup(opts)
     end, {})
 
     command("LocalReviewExport", function(command_opts)
-      require("local_review.export").open_export(command_opts.args)
+      require("local_review.export").open_export(command_opts.args, { clear_after_export = true })
+    end, { nargs = "?" })
+
+    command("LocalReviewExportPreserve", function(command_opts)
+      require("local_review.export").open_export_preserve(command_opts.args)
     end, { nargs = "?" })
 
     command("LocalReviewClear", function(command_opts)

@@ -68,8 +68,14 @@ end, { desc = "Local Review Picker" })
 - `:LocalReviewDelete` delete the comment on the current line
 - `:LocalReviewNext` jump to the next review comment in the current file
 - `:LocalReviewPrev` jump to the previous review comment in the current file
-- `:LocalReviewExport [path]` print review comments for a path in a copy/paste-friendly format. If path is omitted, it uses the current repo root when available, otherwise `cwd`.
+- `:LocalReviewExport [path]` print review comments for a path in a copy/paste-friendly format, then delete the exported comments. If path is omitted, it uses the current repo root when available, otherwise `cwd`.
+- `:LocalReviewExportPreserve [path]` print review comments without deleting them. If path is omitted, it uses the current repo root when available, otherwise `cwd`.
 - `:LocalReviewClear [path]` delete stored review comments for a path. If path is omitted, it uses the current repo root when available, otherwise `cwd`.
+
+## Skills
+
+- [`local-review`](./skills/local-review/SKILL.md) reads comments with `:LocalReviewExport`, which deletes exported comments by default.
+- [`local-review-preserve`](./skills/local-review-preserve/SKILL.md) reads comments with `:LocalReviewExportPreserve`, which leaves comments in place.
 
 ## Notes
 

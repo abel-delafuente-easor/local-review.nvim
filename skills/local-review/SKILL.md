@@ -1,6 +1,6 @@
 ---
 name: local-review
-description: Use this skill when you need to read or clear local-review.nvim comments.
+description: Use this skill when you need to read and consume local-review.nvim comments.
 ---
 
 # Local Review
@@ -19,7 +19,8 @@ installed in the user's normal Neovim setup.
 nvim --headless '+LocalReviewExport [path]' +qa
 ```
 
-Omit path unless the user asks for a specific path.
+Omit path unless the user asks for a specific path. This command deletes the exported
+comments after reading them.
 
 ## Clear comments
 
@@ -31,8 +32,8 @@ Omit path unless the user asks for a specific path.
 
 ## Usage
 
-If the user invokes the skill without any additional instructions, read the comments
-and proceed as this were a code review.  Some comments may be questions, some may ask
+If the user invokes the skill without any additional instructions, read and consume the
+comments, then proceed as this were a code review. Some comments may be questions, some may ask
 you to make concrete changes. If the comment is a question, just answer it and work back and forth with the user.
 
 While responding to comments, ensure that you tell the user which comment you are
@@ -42,5 +43,3 @@ comments.
 
 Comments can be stale. If they are marked stale, confirm with the user before addressing
 them.
-
-Once you address all comments, ask the user if they want to clear the comments.
