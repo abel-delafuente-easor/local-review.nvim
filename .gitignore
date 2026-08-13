@@ -1,3 +1,4 @@
 .nvimlog
 *.DS_Store
 *nvim.log
+doc/tags
