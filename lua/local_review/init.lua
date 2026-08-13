@@ -3,6 +3,7 @@ local M = {}
 local defaults = {
   marker_text = "▎",
   marker_hl = "LocalReviewMarker",
+  stale_marker_hl = "LocalReviewStaleMarker",
   storage_dir = vim.fs.joinpath(vim.fn.stdpath("state"), "local-review"),
   keymaps = {},
   comment_close_keys = {
@@ -85,6 +86,9 @@ function M.setup(opts)
   -- most colorschemes); override with :highlight to customize. The group name
   -- doubles as the sign name for statuscolumn plugins.
   vim.api.nvim_set_hl(0, "LocalReviewMarker", { link = "DiagnosticInfo", default = true })
+
+  -- Marker for stale comments (anchor text no longer found in the file).
+  vim.api.nvim_set_hl(0, "LocalReviewStaleMarker", { link = "DiagnosticWarn", default = true })
 
   -- Title of the comment box while creating/editing. Linked to a group that
   -- is orange in most colorschemes; override with :highlight to customize.

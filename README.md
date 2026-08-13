@@ -31,6 +31,7 @@ Use your preferred plugin manager. Example with `lazy.nvim`:
     require("local_review").setup({
       marker_text = "▎",
       marker_hl = "LocalReviewMarker",
+      stale_marker_hl = "LocalReviewStaleMarker",
       keymaps = {
         comment = "<leader>rc",
         delete = "<leader>rd",

@@ -132,7 +132,7 @@ function M.refresh(bufnr)
     for line = first, last do
       local mark = {
         sign_text = opts.marker_text,
-        sign_hl_group = opts.marker_hl,
+        sign_hl_group = comment.stale and opts.stale_marker_hl or opts.marker_hl,
         priority = 10 + index,
       }
       if line == last and not active and width then
