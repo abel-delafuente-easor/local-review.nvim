@@ -4,6 +4,7 @@ local comments = require("local_review.comments")
 
 local namespace = vim.api.nvim_create_namespace("local-review-ui")
 local placeholder_namespace = vim.api.nvim_create_namespace("local-review-ui-placeholder")
+local padding_namespace = vim.api.nvim_create_namespace("local-review-ui-padding")
 local placeholder_text = "Write a review comment..."
 
 local state = {
@@ -53,33 +54,13 @@ local function editor_buffer_name(source_bufnr, start_line, end_line)
   return string.format("local-review://comment/%s:%d", source_name, start_line)
 end
 
-local function strip_editor_padding(line)
-  return line:gsub("^ ", "", 1)
-end
-
 local function current_body()
   if not is_valid_buffer(state.editor_bufnr) then
     return ""
   end
 
   local lines = vim.api.nvim_buf_get_lines(state.editor_bufnr, 0, -1, false)
-  local stripped = {}
-  for _, line in ipairs(lines) do
-    stripped[#stripped + 1] = strip_editor_padding(line)
-  end
-  return vim.trim(table.concat(stripped, "\n"))
-end
-
-local function pad_editor_lines(lines)
-  local padded = {}
-  for _, line in ipairs(lines) do
-    if line ~= "" and not line:match("^ ") then
-      padded[#padded + 1] = " " .. line
-    else
-      padded[#padded + 1] = line
-    end
-  end
-  return padded
+  return vim.trim(table.concat(lines, "\n"))
 end
 
 local function is_dirty()
@@ -94,19 +75,32 @@ local function update_placeholder(bufnr)
   vim.api.nvim_buf_clear_namespace(bufnr, placeholder_namespace, 0, -1)
 
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local has_content = vim.trim(table.concat(lines, "\n")) ~= ""
-  if has_content then
+  if vim.trim(table.concat(lines, "\n")) ~= "" then
     return
   end
 
-  local first = lines[1] or ""
-  local col = first:match("^%s*$") and vim.fn.strchars(first) or 0
-
-  vim.api.nvim_buf_set_extmark(bufnr, placeholder_namespace, 0, col, {
+  vim.api.nvim_buf_set_extmark(bufnr, placeholder_namespace, 0, 0, {
     virt_text = { { placeholder_text, "Comment" } },
     virt_text_pos = "overlay",
     hl_mode = "combine",
   })
+end
+
+local function refresh_editor_padding(bufnr)
+  if not is_valid_buffer(bufnr) then
+    return
+  end
+
+  vim.api.nvim_buf_clear_namespace(bufnr, padding_namespace, 0, -1)
+
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  for i = 0, line_count - 1 do
+    vim.api.nvim_buf_set_extmark(bufnr, padding_namespace, i, 0, {
+      virt_text = { { " ", "Normal" } },
+      virt_text_pos = "inline",
+      hl_mode = "combine",
+    })
+  end
 end
 
 local function clear_inline_space()
@@ -326,6 +320,8 @@ local function update_layout()
     width = size.width,
     height = size.height,
   })
+
+  refresh_editor_padding(state.editor_bufnr)
 end
 
 local function set_editor_keymaps(bufnr)
@@ -343,42 +339,6 @@ local function set_editor_keymaps(bufnr)
       M.close_active()
     end, "Local Review: Close")
   end
-
-  -- The box's left padding is a real space in the buffer. Swallow <BS>/<Del>
-  -- when they would delete it so the padding (and the placeholder position)
-  -- stays put.
-  local function padded_delete(key, deletes_first_char)
-    return function()
-      local col = vim.api.nvim_win_get_cursor(0)[2]
-      local first = vim.api.nvim_get_current_line():sub(1, 1)
-      if first == " " and deletes_first_char(col) then
-        return ""
-      end
-      return key
-    end
-  end
-
-  vim.keymap.set(
-    "i",
-    "<BS>",
-    padded_delete("<BS>", function(col)
-      return col == 1
-    end),
-    { buffer = bufnr, expr = true, desc = "Local Review: Backspace" }
-  )
-  vim.keymap.set(
-    "i",
-    "<Del>",
-    padded_delete("<Del>", function(col)
-      return col == 0
-    end),
-    { buffer = bufnr, expr = true, desc = "Local Review: Delete" }
-  )
-
-  -- Keep the cursor out of the left padding cell.
-  vim.keymap.set("i", "<Left>", function()
-    return vim.api.nvim_win_get_cursor(0)[2] <= 1 and "" or "<Left>"
-  end, { buffer = bufnr, expr = true, desc = "Local Review: Left" })
 
   -- <CR> accepts the comment; <S-CR> inserts a newline.
   vim.keymap.set({ "n", "i" }, "<CR>", function()
@@ -504,11 +464,8 @@ function M.open_current_line(range)
   vim.bo[bufnr].modifiable = true
   vim.bo[bufnr].filetype = "markdown"
   vim.api.nvim_buf_set_name(bufnr, editor_buffer_name(source_bufnr, start_line, end_line))
-
-  if #lines == 1 and lines[1] == "" then
-    lines[1] = " "
-  end
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, pad_editor_lines(lines))
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+  refresh_editor_padding(bufnr)
 
   state.editor_bufnr = bufnr
   state.source_bufnr = source_bufnr
