@@ -22,15 +22,24 @@ local function telescope_modules()
   }
 end
 
-local function entry_displayer(entry_display)
+local function entry_displayer(entry_display, line_width)
   return entry_display.create({
     separator = " ",
     items = {
       { width = 40 },
-      { width = 6 },
+      { width = line_width },
       { remaining = true },
     },
   })
+end
+
+local function line_range_str(comment)
+  local start_line = comment.anchor.line_number
+  local end_line = comment.line_end
+  if end_line and end_line ~= start_line then
+    return string.format("%d-%d", start_line, end_line)
+  end
+  return tostring(start_line)
 end
 
 local function comment_summary(body)
@@ -53,8 +62,18 @@ local function open_comment(comment)
 
   vim.cmd.edit(vim.fn.fnameescape(comment.absolute_path))
   local max_line = math.max(vim.api.nvim_buf_line_count(0), 1)
-  local line = math.max(1, math.min(comment.anchor.line_number, max_line))
-  vim.api.nvim_win_set_cursor(0, { line, 0 })
+  local start_line = math.max(1, math.min(comment.anchor.line_number, max_line))
+  local end_line = comment.line_end and math.max(1, math.min(comment.line_end, max_line)) or start_line
+  if end_line < start_line then
+    end_line = start_line
+  end
+
+  vim.api.nvim_win_set_cursor(0, { start_line, 0 })
+  vim.cmd("normal! V")
+  if end_line > start_line then
+    vim.cmd("normal! " .. (end_line - start_line) .. "j")
+  end
+
   if comment.stale then
     vim.notify("This review comment is stale and may no longer point at the original code.", vim.log.levels.WARN)
   end
@@ -66,10 +85,10 @@ local function preview_lines(comment)
       string.format("File not found: %s", comment.absolute_path),
       "",
       comment.body,
-    }, nil
+    }, nil, nil
   end
 
-  return vim.fn.readfile(comment.absolute_path), comment.anchor.line_number
+  return vim.fn.readfile(comment.absolute_path), comment.anchor.line_number, comment.line_end
 end
 
 local function previewer(previewers)
@@ -77,7 +96,7 @@ local function previewer(previewers)
     title = "Review Comment",
     define_preview = function(self, entry, status)
       local comment = entry.value
-      local lines, target_line = preview_lines(comment)
+      local lines, start_line, end_line = preview_lines(comment)
 
       vim.bo[self.state.bufnr].modifiable = true
       vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
@@ -90,11 +109,18 @@ local function previewer(previewers)
       end
 
       vim.api.nvim_buf_clear_namespace(self.state.bufnr, preview_namespace, 0, -1)
-      if target_line then
+      if start_line then
         local max_line = vim.api.nvim_buf_line_count(self.state.bufnr)
-        local clamped_line = math.max(1, math.min(target_line, max_line))
-        vim.hl.range(self.state.bufnr, preview_namespace, "Visual", { clamped_line - 1, 0 }, { clamped_line - 1, -1 })
-        pcall(vim.api.nvim_win_set_cursor, status.preview_win, { clamped_line, 0 })
+        local clamped_start = math.max(1, math.min(start_line, max_line))
+        local clamped_end = math.max(clamped_start, math.min(end_line or start_line, max_line))
+        vim.hl.range(
+          self.state.bufnr,
+          preview_namespace,
+          "Visual",
+          { clamped_start - 1, 0 },
+          { clamped_end - 1, -1 }
+        )
+        pcall(vim.api.nvim_win_set_cursor, status.preview_win, { clamped_start, 0 })
         pcall(vim.api.nvim_win_call, status.preview_win, function()
           vim.cmd("normal! zz")
         end)
@@ -123,7 +149,11 @@ function M.comments(opts)
     return
   end
 
-  local displayer = entry_displayer(modules.entry_display)
+  local line_width = 6
+  for _, c in ipairs(path_comments) do
+    line_width = math.max(line_width, #line_range_str(c))
+  end
+  local displayer = entry_displayer(modules.entry_display, line_width)
 
   modules.pickers
     .new(opts, {
@@ -136,13 +166,13 @@ function M.comments(opts)
             value = comment,
             ordinal = table.concat({
               comment.absolute_path,
-              tostring(comment.anchor.line_number),
+              line_range_str(comment),
               summary,
             }, " "),
             display = function(entry)
               return displayer({
                 entry.value.absolute_path,
-                tostring(entry.value.anchor.line_number),
+                line_range_str(entry.value),
                 status_summary(entry.value),
               })
             end,
