@@ -348,4 +348,135 @@ describe("comment_store.ensure_comment_defaults", function()
 
     assert.are.equal("existing", comment.id)
   end)
+
+  it("derives line_end from anchor_end when line_end is missing", function()
+    local comment = {
+      id = "",
+      anchor = { line_number = 2 },
+      anchor_end = { line_number = 8 },
+    }
+
+    comment_store.ensure_comment_defaults(comment, id_generator())
+
+    assert.are.equal(8, comment.line_end)
+  end)
+end)
+
+describe("comment_store dual-anchor reconcile", function()
+  local function make_dual_anchor_comment(start_line, end_line)
+    return {
+      id = "dual",
+      absolute_path = "/fake/path.lua",
+      body = "body",
+      created_at = "t1",
+      updated_at = "t1",
+      source_kind = "test",
+      source_meta = {},
+      stale = false,
+      anchor = { line_number = start_line },
+      anchor_end = { line_number = end_line },
+      line_end = end_line,
+    }
+  end
+
+  local function resolve_with_offsets(start_offset, end_offset)
+    return function(anchor, _)
+      if anchor.line_number == 3 then
+        return anchor.line_number + start_offset
+      end
+      return anchor.line_number + end_offset
+    end
+  end
+
+  it("keeps start and shifts end when lines are inserted inside the range", function()
+    local comment = make_dual_anchor_comment(3, 7)
+    local lines = lines_fixture()
+
+    local changed = comment_store.reconcile_comment(
+      comment,
+      lines,
+      resolve_with_offsets(0, 2),
+      simple_capture,
+      id_generator()
+    )
+
+    assert.is_true(changed)
+    assert.is_false(comment.stale)
+    assert.are.equal(3, comment.anchor.line_number)
+    assert.are.equal(9, comment.anchor_end.line_number)
+    assert.are.equal(9, comment.line_end)
+  end)
+
+  it("marks the comment stale when the end anchor is lost", function()
+    local comment = make_dual_anchor_comment(3, 7)
+    local lines = lines_fixture()
+    local function resolve(anchor, _)
+      if anchor.line_number == 3 then
+        return 3
+      end
+      return nil
+    end
+
+    local changed = comment_store.reconcile_comment(comment, lines, resolve, simple_capture, id_generator())
+
+    assert.is_true(changed)
+    assert.is_true(comment.stale)
+    assert.are.equal(3, comment.anchor.line_number)
+    assert.are.equal(7, comment.anchor_end.line_number)
+    assert.are.equal(7, comment.line_end)
+  end)
+
+  it("shifts both ends when the whole range is moved", function()
+    local comment = make_dual_anchor_comment(3, 7)
+    local lines = lines_fixture()
+
+    local changed = comment_store.reconcile_comment(
+      comment,
+      lines,
+      resolve_with_offsets(2, 2),
+      simple_capture,
+      id_generator()
+    )
+
+    assert.is_true(changed)
+    assert.is_false(comment.stale)
+    assert.are.equal(5, comment.anchor.line_number)
+    assert.are.equal(9, comment.anchor_end.line_number)
+    assert.are.equal(9, comment.line_end)
+  end)
+
+  it("leaves a single-line dual-anchor comment unchanged when resolved to the same line", function()
+    local comment = make_dual_anchor_comment(5, 5)
+    local lines = lines_fixture()
+    local function resolve(anchor, _)
+      return anchor.line_number
+    end
+
+    local changed = comment_store.reconcile_comment(comment, lines, resolve, simple_capture, id_generator())
+
+    assert.is_false(changed)
+    assert.is_false(comment.stale)
+    assert.are.equal(5, comment.anchor.line_number)
+    assert.are.equal(5, comment.anchor_end.line_number)
+    assert.are.equal(5, comment.line_end)
+  end)
+
+  it("swaps start and end when the resolved range is inverted", function()
+    local comment = make_dual_anchor_comment(3, 7)
+    local lines = lines_fixture()
+    local function resolve(anchor, _)
+      if anchor.line_number == 3 then
+        return 8
+      end
+      return 2
+    end
+
+    local changed = comment_store.reconcile_comment(comment, lines, resolve, simple_capture, id_generator())
+
+    assert.is_true(changed)
+    assert.is_false(comment.stale)
+    assert.are.equal(2, comment.anchor.line_number)
+    assert.are.equal(8, comment.anchor_end.line_number)
+    assert.are.equal(8, comment.line_end)
+  end)
 end)

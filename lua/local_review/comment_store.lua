@@ -11,6 +11,7 @@ local M = {}
 ---@field stale boolean
 ---@field line_end integer?
 ---@field anchor LineAnchor
+---@field anchor_end LineAnchor?
 
 ---@param comment LocalReviewComment
 ---@param generate_id (fun(): string)?
@@ -21,7 +22,14 @@ function M.ensure_comment_defaults(comment, generate_id)
   if comment.stale == nil then
     comment.stale = false
   end
-  if comment.anchor and (comment.line_end == nil or comment.line_end < comment.anchor.line_number) then
+  if comment.line_end == nil then
+    if comment.anchor_end then
+      comment.line_end = comment.anchor_end.line_number
+    else
+      comment.line_end = comment.anchor.line_number
+    end
+  end
+  if comment.line_end < comment.anchor.line_number then
     comment.line_end = comment.anchor.line_number
   end
 end
@@ -88,6 +96,14 @@ function M.apply_anchor(comment, capture, lines, line)
 end
 
 ---@param comment LocalReviewComment
+---@param capture fun(lines: string[], line: integer): LineAnchor
+---@param lines string[]
+---@param line integer
+function M.apply_anchor_end(comment, capture, lines, line)
+  comment.anchor_end = capture(lines, line)
+end
+
+---@param comment LocalReviewComment
 ---@param lines string[]
 ---@param resolve fun(anchor: LineAnchor, lines: string[]): integer?
 ---@param capture fun(lines: string[], line: integer): LineAnchor
@@ -96,6 +112,25 @@ end
 function M.reconcile_comment(comment, lines, resolve, capture, generate_id)
   M.ensure_comment_defaults(comment, generate_id)
 
+  -- Comments created before dual-anchor support only store a single anchor.
+  -- Keep the legacy delta-shift behaviour for them; they will be upgraded to
+  -- dual anchors the next time the comment is re-created or edited with a
+  -- range.
+  local is_legacy = comment.anchor_end == nil
+
+  if is_legacy then
+    return M.reconcile_legacy_comment(comment, lines, resolve, capture)
+  end
+
+  return M.reconcile_dual_anchor_comment(comment, lines, resolve, capture)
+end
+
+---@param comment LocalReviewComment
+---@param lines string[]
+---@param resolve fun(anchor: LineAnchor, lines: string[]): integer?
+---@param capture fun(lines: string[], line: integer): LineAnchor
+---@return boolean
+function M.reconcile_legacy_comment(comment, lines, resolve, capture)
   local resolved = resolve(comment.anchor, lines)
   if not resolved then
     if not comment.stale then
@@ -113,6 +148,55 @@ function M.reconcile_comment(comment, lines, resolve, capture, generate_id)
   local line_end = (comment.line_end or comment.anchor.line_number) + (resolved - comment.anchor.line_number)
   M.apply_anchor(comment, capture, lines, resolved)
   comment.line_end = math.max(resolved, line_end)
+  return true
+end
+
+---@param comment LocalReviewComment
+---@param lines string[]
+---@param resolve fun(anchor: LineAnchor, lines: string[]): integer?
+---@param capture fun(lines: string[], line: integer): LineAnchor
+---@return boolean
+function M.reconcile_dual_anchor_comment(comment, lines, resolve, capture)
+  local resolved_start = resolve(comment.anchor, lines)
+  local resolved_end = resolve(comment.anchor_end, lines)
+
+  if not resolved_start and not resolved_end then
+    if not comment.stale then
+      comment.stale = true
+      return true
+    end
+    return false
+  end
+
+  if resolved_start and resolved_end then
+    if resolved_end < resolved_start then
+      resolved_start, resolved_end = resolved_end, resolved_start
+    end
+
+    if resolved_start == comment.anchor.line_number
+        and resolved_end == comment.anchor_end.line_number
+        and not comment.stale then
+      return false
+    end
+
+    M.apply_anchor(comment, capture, lines, resolved_start)
+    M.apply_anchor_end(comment, capture, lines, resolved_end)
+    comment.line_end = resolved_end
+    return true
+  end
+
+  -- Partial loss: one end resolves, the other does not. Preserve the resolved
+  -- side and mark the comment stale. The lost side keeps its last known
+  -- position. Do not use M.apply_anchor here because it resets stale to false.
+  comment.stale = true
+
+  if resolved_start then
+    comment.anchor = capture(lines, resolved_start)
+  elseif resolved_end then
+    M.apply_anchor_end(comment, capture, lines, resolved_end)
+    comment.line_end = resolved_end
+  end
+
   return true
 end
 
@@ -146,6 +230,11 @@ function M.upsert_comment(comments, opts)
     if opts.line_end ~= nil then
       M.apply_anchor(existing, opts.capture, opts.lines, resolved_line)
       existing.line_end = resolved_end
+      if resolved_end > resolved_line then
+        M.apply_anchor_end(existing, opts.capture, opts.lines, resolved_end)
+      else
+        existing.anchor_end = nil
+      end
     end
     return existing, true
   end
@@ -163,6 +252,9 @@ function M.upsert_comment(comments, opts)
 
   M.apply_anchor(comment, opts.capture, opts.lines, resolved_line)
   comment.line_end = resolved_end
+  if resolved_end > resolved_line then
+    M.apply_anchor_end(comment, opts.capture, opts.lines, resolved_end)
+  end
   table.insert(comments, comment)
   return comment, false
 end
