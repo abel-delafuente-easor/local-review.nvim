@@ -67,6 +67,9 @@ All fields are optional. Keymaps left nil or empty are not created.
                                                         *:LocalReviewDelete*
 :LocalReviewDelete      Delete the comment covering the current line.
 
+Comments can only be added to real file buffers. Scheme-prefixed buffers
+(diffview://, fugitive://, oil://, ...) are rejected with a notification.
+
                                                         *:LocalReviewNext*
 :LocalReviewNext        Jump to the next comment in the buffer (wraps).
 

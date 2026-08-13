@@ -17,6 +17,11 @@ function M.current_file(bufnr)
   if path == nil or path == "" then
     return nil, "Current buffer has no file path."
   end
+  -- Scheme-prefixed buffer names (diffview://, fugitive://, oil://, ...)
+  -- are not real files; comments on them could never be reopened.
+  if path:match("^%a[%w+%.%-]*://") then
+    return nil, "Cannot add a review comment here: not a real file."
+  end
   return normalize(path)
 end
 
