@@ -1,27 +1,16 @@
 local M = {}
 
----@class LocalReviewComment
----@field id string
----@field absolute_path string
----@field body string
----@field created_at string
----@field updated_at string
----@field source_kind string
----@field source_meta table
----@field stale boolean
----@field line_end integer?
----@field anchor LineAnchor
-
 local context = require("local_review.context")
 local positioning = require("local_review.positioning")
 local storage = require("local_review.storage")
+local comment_store = require("local_review.comment_store")
 
 local state = {
   file_fingerprints = {},
 }
 
 local function now()
-  return os.date("!%Y-%m-%dT%H:%M:%SZ")
+  return tostring(os.date("!%Y-%m-%dT%H:%M:%SZ"))
 end
 
 local function hrtime()
@@ -29,31 +18,18 @@ local function hrtime()
   return vim.uv.hrtime()
 end
 
+local function generate_id()
+  return tostring(hrtime())
+end
+
+local function ensure_defaults(comment)
+  comment_store.ensure_comment_defaults(comment, generate_id)
+end
+
 ---@param bufnr integer
 ---@return string[]
 local function buffer_lines(bufnr)
   return vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-end
-
----@param comment LocalReviewComment
----@param lines string[]
----@param line integer
-local function apply_anchor(comment, lines, line)
-  comment.anchor = positioning.capture(lines, line)
-  comment.stale = false
-end
-
----@param comment LocalReviewComment
-local function ensure_comment_defaults(comment)
-  if comment.id == "" then
-    comment.id = tostring(hrtime())
-  end
-  if comment.stale == nil then
-    comment.stale = false
-  end
-  if comment.anchor and (comment.line_end == nil or comment.line_end < comment.anchor.line_number) then
-    comment.line_end = comment.anchor.line_number
-  end
 end
 
 local function current_line()
@@ -85,81 +61,10 @@ local function persist_scope_state(scope_root, data)
   return true
 end
 
-local function comment_sorter(a, b)
-  if a.absolute_path ~= b.absolute_path then
-    return a.absolute_path < b.absolute_path
-  end
-  if a.anchor.line_number ~= b.anchor.line_number then
-    return a.anchor.line_number < b.anchor.line_number
-  end
-  return (a.created_at or "") < (b.created_at or "")
-end
-
 ---@param lines string[]
 ---@return string
 local function buffer_fingerprint(lines)
   return vim.fn.sha256(table.concat(lines, "\n"))
-end
-
----@param comment LocalReviewComment
----@param lines string[]
----@return boolean
-local function reconcile_comment(comment, lines)
-  ensure_comment_defaults(comment)
-
-  local resolved = positioning.resolve(comment.anchor, lines)
-  if not resolved then
-    if not comment.stale then
-      comment.stale = true
-      return true
-    end
-    return false
-  end
-
-  if comment.anchor.line_number == resolved and not comment.stale then
-    apply_anchor(comment, lines, resolved)
-    return false
-  end
-
-  local line_end = (comment.line_end or comment.anchor.line_number) + (resolved - comment.anchor.line_number)
-  apply_anchor(comment, lines, resolved)
-  comment.line_end = math.max(resolved, line_end)
-  return true
-end
-
-local function clamp_line(line, lines)
-  local max_line = math.max(#lines, 1)
-  return math.max(1, math.min(line, max_line))
-end
-
-local function comment_covers_line(comment, absolute_path, line)
-  if comment.absolute_path ~= absolute_path then
-    return false
-  end
-
-  local first = comment.anchor.line_number
-  local last = math.max(first, comment.line_end or first)
-  return line >= first and line <= last
-end
-
-local function find_comment_at_line(comments, absolute_path, line)
-  for _, comment in ipairs(comments) do
-    ensure_comment_defaults(comment)
-    if comment_covers_line(comment, absolute_path, line) then
-      return comment
-    end
-  end
-  return nil
-end
-
-local function find_comment_entry_at_line(comments, absolute_path, line)
-  for index, comment in ipairs(comments) do
-    ensure_comment_defaults(comment)
-    if comment_covers_line(comment, absolute_path, line) then
-      return comment, index
-    end
-  end
-  return nil, nil
 end
 
 local function reconcile_buffer_state(bufnr, scope_state, ctx)
@@ -175,7 +80,7 @@ local function reconcile_buffer_state(bufnr, scope_state, ctx)
   local changed = false
   for _, comment in ipairs(comments) do
     if comment.absolute_path == ctx.absolute_path then
-      if reconcile_comment(comment, lines) then
+      if comment_store.reconcile_comment(comment, lines, positioning.resolve, positioning.capture, generate_id) then
         changed = true
       end
     end
@@ -212,41 +117,19 @@ end
 
 ---@return LocalReviewComment, boolean
 local function upsert_comment(scope_state, ctx, line, body, line_end)
-  local comments = scope_state.data.comments
-  local existing = find_comment_at_line(comments, ctx.absolute_path, line)
-
-  local timestamp = now()
-  local lines = buffer_lines(ctx.bufnr)
-  local resolved_line = clamp_line(line, lines)
-  local resolved_end = clamp_line(math.max(line, line_end or line), lines)
-  if existing then
-    existing.body = body
-    existing.updated_at = timestamp
-    existing.absolute_path = ctx.absolute_path
-    if line_end ~= nil then
-      apply_anchor(existing, lines, resolved_line)
-      existing.line_end = resolved_end
-    end
-    return existing, true
-  end
-
   local filetype = vim.bo[ctx.bufnr].filetype or ""
-  local source_kind = filetype:match("^Diffview") and "diffview" or "buffer"
-  local comment = {
-    id = tostring(hrtime()),
+  return comment_store.upsert_comment(scope_state.data.comments, {
     absolute_path = ctx.absolute_path,
+    line = line,
     body = body,
-    created_at = timestamp,
-    updated_at = timestamp,
-    source_kind = source_kind,
+    line_end = line_end,
+    lines = buffer_lines(ctx.bufnr),
+    timestamp = now(),
+    capture = positioning.capture,
+    generate_id = generate_id,
+    source_kind = filetype:match("^Diffview") and "diffview" or "buffer",
     source_meta = {},
-    stale = false,
-  }
-
-  apply_anchor(comment, lines, resolved_line)
-  comment.line_end = resolved_end
-  table.insert(comments, comment)
-  return comment, false
+  })
 end
 
 local function find_current_comment()
@@ -258,7 +141,7 @@ local function find_current_comment()
 
   local line = current_line()
   local comment, index =
-    find_comment_entry_at_line(resolved.scope_state.data.comments, resolved.ctx.absolute_path, line)
+    comment_store.find_comment_entry_at_line(resolved.scope_state.data.comments, resolved.ctx.absolute_path, line)
   return {
     ---@type LocalReviewComment?
     comment = comment,
@@ -275,7 +158,7 @@ local function find_line_comment(bufnr, line)
   end
 
   local comment, index =
-    find_comment_entry_at_line(resolved.scope_state.data.comments, resolved.ctx.absolute_path, line)
+    comment_store.find_comment_entry_at_line(resolved.scope_state.data.comments, resolved.ctx.absolute_path, line)
   return {
     ---@type LocalReviewComment?
     comment = comment,
@@ -288,9 +171,9 @@ end
 local function comments_in_scope(scope_root)
   local data = storage.load_scope(scope_root)
   for _, comment in ipairs(data.comments) do
-    ensure_comment_defaults(comment)
+    ensure_defaults(comment)
   end
-  table.sort(data.comments, comment_sorter)
+  table.sort(data.comments, comment_store.comment_sorter)
   return data.comments
 end
 
@@ -298,7 +181,7 @@ local function comments_matching_path(target_path, kind)
   local matches = {}
   for _, scope in ipairs(storage.list_scopes()) do
     for _, comment in ipairs(scope.data.comments or {}) do
-      ensure_comment_defaults(comment)
+      ensure_defaults(comment)
       if kind == "file" then
         if comment.absolute_path == target_path then
           table.insert(matches, comment)
@@ -309,7 +192,7 @@ local function comments_matching_path(target_path, kind)
     end
   end
 
-  table.sort(matches, comment_sorter)
+  table.sort(matches, comment_store.comment_sorter)
   return matches
 end
 
@@ -401,25 +284,6 @@ function M.get_line_state(bufnr, line)
   return result
 end
 
-function M.upsert_line_comment(line_state, body)
-  local trimmed = vim.trim(body or "")
-  if trimmed == "" then
-    return nil, "Comment cannot be empty."
-  end
-
-  local _, updated = upsert_comment(
-    line_state.scope_state,
-    line_state.ctx,
-    line_state.comment and line_state.comment.anchor.line_number or current_line(),
-    trimmed
-  )
-  local ok, err = persist_scope_state(line_state.ctx.scope_root, line_state.scope_state.data)
-  if not ok then
-    return nil, err
-  end
-  return updated and "updated" or "created"
-end
-
 function M.set_line_comment(bufnr, line, body, range)
   local line_state = M.get_line_state(bufnr, line)
   if not line_state then
@@ -471,49 +335,6 @@ function M.delete_line_comment(bufnr, line)
     return nil, err
   end
   return "deleted"
-end
-
-local function prompt_display_path(ctx)
-  local repo_root = context.repo_root(ctx.absolute_path)
-  if repo_root then
-    return context.relative_path(repo_root, ctx.absolute_path) or ctx.absolute_path
-  end
-
-  return ctx.absolute_path
-end
-
-function M.prompt_for_current_line()
-  local result = find_current_comment()
-  if not result then
-    return
-  end
-
-  local line = current_line()
-  local prompt = result.comment and "Edit review comment" or "Add review comment"
-  local display_path = prompt_display_path(result.ctx)
-
-  vim.ui.input({
-    prompt = string.format("%s (%s:%d): ", prompt, display_path, line),
-    default = result.comment and result.comment.body or "",
-  }, function(input)
-    if input == nil then
-      return
-    end
-
-    local trimmed = vim.trim(input)
-    if trimmed == "" then
-      vim.notify("Comment cannot be empty.", vim.log.levels.WARN)
-      return
-    end
-
-    local _, updated = upsert_comment(result.scope_state, result.ctx, line, trimmed)
-    local ok, err = persist_scope_state(result.ctx.scope_root, result.scope_state.data)
-    if not ok then
-      vim.notify(err or "Failed to save the review comment.", vim.log.levels.ERROR)
-      return
-    end
-    vim.notify(updated and "Review comment updated." or "Review comment added.", vim.log.levels.INFO)
-  end)
 end
 
 function M.delete_current_line()

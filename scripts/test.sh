@@ -7,4 +7,4 @@ if ! command -v busted >/dev/null 2>&1; then
   exit 1
 fi
 
-busted tests/positioning_spec.lua
+busted tests/
