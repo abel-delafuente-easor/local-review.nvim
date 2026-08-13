@@ -4,7 +4,6 @@ local comments = require("local_review.comments")
 
 local namespace = vim.api.nvim_create_namespace("local-review-ui")
 local placeholder_namespace = vim.api.nvim_create_namespace("local-review-ui-placeholder")
-local padding_namespace = vim.api.nvim_create_namespace("local-review-ui-padding")
 local placeholder_text = "Write a review comment..."
 
 local state = {
@@ -84,23 +83,6 @@ local function update_placeholder(bufnr)
     virt_text_pos = "overlay",
     hl_mode = "combine",
   })
-end
-
-local function refresh_editor_padding(bufnr)
-  if not is_valid_buffer(bufnr) then
-    return
-  end
-
-  vim.api.nvim_buf_clear_namespace(bufnr, padding_namespace, 0, -1)
-
-  local line_count = vim.api.nvim_buf_line_count(bufnr)
-  for i = 0, line_count - 1 do
-    vim.api.nvim_buf_set_extmark(bufnr, padding_namespace, i, 0, {
-      virt_text = { { " ", "Normal" } },
-      virt_text_pos = "inline",
-      hl_mode = "combine",
-    })
-  end
 end
 
 local function clear_inline_space()
@@ -320,8 +302,6 @@ local function update_layout()
     width = size.width,
     height = size.height,
   })
-
-  refresh_editor_padding(state.editor_bufnr)
 end
 
 local function set_editor_keymaps(bufnr)
@@ -462,7 +442,6 @@ function M.open_current_line(range)
   vim.bo[bufnr].filetype = "markdown"
   vim.api.nvim_buf_set_name(bufnr, editor_buffer_name(source_bufnr, start_line, end_line))
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-  refresh_editor_padding(bufnr)
 
   state.editor_bufnr = bufnr
   state.source_bufnr = source_bufnr
@@ -503,6 +482,9 @@ function M.open_current_line(range)
   vim.wo[winid].number = false
   vim.wo[winid].relativenumber = false
   vim.wo[winid].signcolumn = "no"
+  -- Left padding via window chrome: always visible, and the cursor can
+  -- never enter it (unlike inline virtual text at column 0).
+  vim.wo[winid].statuscolumn = " "
   vim.wo[winid].winhighlight = "Normal:NormalFloat,FloatBorder:FloatBorder,FloatTitle:LocalReviewEditorTitle"
   vim.bo[bufnr].autoindent = true
 
