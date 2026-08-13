@@ -29,7 +29,7 @@ Use your preferred plugin manager. Example with `lazy.nvim`:
 
 ```lua
 {
-  "your-username/local-review.nvim", -- adjust to your fork
+  "abel-delafuente-easor/local-review.nvim",
   config = function()
     require("local_review").setup({
       marker_text = "▎",
