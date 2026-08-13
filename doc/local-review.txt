@@ -1,0 +1,187 @@
+*local-review.txt*  Local code review comments for coding agents
+
+==============================================================================
+CONTENTS                                                  *local-review*
+
+  1. Introduction ............... |local-review-introduction|
+  2. Setup ...................... |local-review-setup|
+  3. Commands ................... |local-review-commands|
+  4. Keymaps .................... |local-review-keymaps|
+  5. Multi-line comments ........ |local-review-ranges|
+  6. Stale comments ............. |local-review-stale|
+  7. Exporting .................. |local-review-export|
+  8. Highlights ................. |local-review-highlights|
+  9. Telescope .................. |local-review-telescope|
+ 10. Storage .................... |local-review-storage|
+
+==============================================================================
+1. INTRODUCTION                                   *local-review-introduction*
+
+local-review.nvim lets you attach review comments to lines of code while
+reading it, then export all comments as plain text meant to be pasted into a
+coding agent (or copied via the included agent skill).
+
+Comments are anchored to the text they were written on, not just the line
+number, so they follow the code when the file changes. See
+|local-review-stale|.
+
+==============================================================================
+2. SETUP                                                   *local-review-setup*
+
+>lua
+    require("local_review").setup({
+      marker_text = "▎",                       -- gutter sign text
+      marker_hl = "LocalReviewMarker",         -- gutter sign highlight
+      stale_marker_hl = "LocalReviewStaleMarker", -- stale sign highlight
+      storage_dir = vim.fn.stdpath("state") .. "/local-review",
+      keymaps = {
+        comment = "<leader>rc",
+        delete  = "<leader>rd",
+        next    = "]r",
+        prev    = "[r",
+        export  = "<leader>re",
+        list    = "<leader>rl",
+      },
+      comment_close_keys = {
+        { modes = { "n" }, key = "q" },
+        { modes = { "n", "i" }, key = "<C-c>" },
+      },
+    })
+<
+All fields are optional. Keymaps left nil or empty are not created.
+
+==============================================================================
+3. COMMANDS                                             *local-review-commands*
+
+                                                        *:LocalReviewComment*
+:LocalReviewComment     Open the comment editor for the current line. Accepts
+                        a range: >vim
+                        :'<,'>LocalReviewComment
+<                       comments on the selected lines. When a comment
+                        already exists on any covered line, it is edited
+                        instead. In the editor:
+                          - <CR> accepts and closes
+                          - <S-CR> inserts a newline (insert mode)
+                          - keys from `comment_close_keys` accept and close
+
+                                                        *:LocalReviewDelete*
+:LocalReviewDelete      Delete the comment covering the current line.
+
+                                                        *:LocalReviewNext*
+:LocalReviewNext        Jump to the next comment in the buffer (wraps).
+
+                                                        *:LocalReviewPrev*
+:LocalReviewPrev        Jump to the previous comment in the buffer (wraps).
+
+                                                        *:LocalReviewExport*
+:LocalReviewExport [path]
+                        Copy all comments under [path] (default: current
+                        repo) to the system clipboard as agent-ready text,
+                        then DELETE them. See |local-review-export|.
+
+                                                *:LocalReviewExportPreserve*
+:LocalReviewExportPreserve [path]
+                        Like |:LocalReviewExport| but keeps the comments.
+
+                                                        *:LocalReviewClear*
+:LocalReviewClear [path]
+                        Delete all comments under [path] (default: current
+                        repo).
+
+                                                        *:LocalReviewList*
+:LocalReviewList [path] List comments under [path] in the quickfix list.
+
+==============================================================================
+4. KEYMAPS                                               *local-review-keymaps*
+
+Default mappings are only created for the keys you configure in
+`setup({ keymaps = ... })`. The comment and delete mappings work in visual
+mode: selecting lines first creates (or edits) a multi-line comment, see
+|local-review-ranges|.
+
+==============================================================================
+5. MULTI-LINE COMMENTS                                    *local-review-ranges*
+
+Visually selecting lines before invoking the comment command attaches the
+comment to the whole range:
+
+  - every line of the range gets the gutter sign
+  - the comment box is drawn below the last line
+  - the export text references the range: `file.lua:3-5`
+  - the Telescope picker and quickfix list show the range
+  - deleting anywhere inside the range removes the comment
+
+==============================================================================
+6. STALE COMMENTS                                         *local-review-stale*
+
+A comment is anchored to the text of its line plus the surrounding lines.
+When the file changes:
+
+  - the anchor text is still found      -> the comment follows it, even if
+                                           the line number changed
+  - the text is gone but its context    -> the comment stays put (the line
+    survives                                was likely just edited)
+  - neither text nor context is found   -> the comment becomes STALE
+
+Stale comments keep their last known position, render with the
+`LocalReviewStaleMarker` highlight, show `[stale]` in their box title, and
+trigger a warning when jumped to. They recover automatically if the text
+reappears (revert, merge, undo).
+
+==============================================================================
+7. EXPORTING                                             *local-review-export*
+
+|:LocalReviewExport| produces text like:
+
+>
+    Please address the following feedback
+
+    1. lua/local_review/ui.lua:12-18
+       This loop re-renders on every keystroke
+
+    2. lua/local_review/ui.lua:40 [stale]
+       Renamed below
+<
+and copies it to the `+` and `*` registers.
+
+WARNING: |:LocalReviewExport| deletes the exported comments afterwards by
+design (the agent consumes them). Use |:LocalReviewExportPreserve| to keep
+them.
+
+==============================================================================
+8. HIGHLIGHTS                                         *local-review-highlights*
+
+                                                  *hl-LocalReviewMarker*
+LocalReviewMarker       Gutter sign for comments. Default: DiagnosticInfo.
+
+                                               *hl-LocalReviewStaleMarker*
+LocalReviewStaleMarker  Gutter sign for stale comments.
+                        Default: DiagnosticWarn.
+
+                                              *hl-LocalReviewEditorTitle*
+LocalReviewEditorTitle  Title of the editor float. Default: Number.
+
+Override with: >vim
+    vim.api.nvim_set_hl(0, "LocalReviewMarker", { link = "Constant" })
+<
+
+==============================================================================
+9. TELESCOPE                                           *local-review-telescope*
+
+If nvim-telescope/telescope.nvim is installed: >lua
+    require("local_review.telescope").comments()
+<
+opens a picker over all comments in the current repo, with a preview
+highlighting the commented range. Selecting an entry jumps to the file and
+visually selects the range.
+
+==============================================================================
+10. STORAGE                                             *local-review-storage*
+
+Comments are stored as JSON in `storage_dir`, one file per repository
+(keyed by the git toplevel, or the current working directory outside git
+repos). Writes are guarded against concurrent Neovim instances: if the file
+changed on disk since it was loaded, comments are merged by id instead of
+overwritten.
+
+vim:tw=78:ts=8:ft=help:norl:
