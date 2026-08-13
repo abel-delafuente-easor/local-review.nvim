@@ -69,7 +69,7 @@ end, { desc = "Local Review Picker" })
 - `:LocalReviewDelete` delete the comment on the current line
 - `:LocalReviewNext` jump to the next review comment in the current file
 - `:LocalReviewPrev` jump to the previous review comment in the current file
-- `:LocalReviewExport [path]` copy review comments for a path to the system clipboard in a copy/paste-friendly format, then delete the exported comments. In headless mode the output is printed to stdout so agent skills can read it. If path is omitted, it uses the current repo root when available, otherwise `cwd`.
+- `:LocalReviewExport [path]` copy review comments for a path to the system clipboard in a copy/paste-friendly format, then delete the exported comments if the clipboard copy succeeded. In headless mode the output is printed to stdout so agent skills can read it and the comments are still cleared. If path is omitted, it uses the current repo root when available, otherwise `cwd`.
 - `:LocalReviewExportPreserve [path]` copy review comments to the system clipboard without deleting them. In headless mode the output is printed to stdout. If path is omitted, it uses the current repo root when available, otherwise `cwd`.
 - `:LocalReviewClear [path]` delete stored review comments for a path. If path is omitted, it uses the current repo root when available, otherwise `cwd`.
 - `:LocalReviewList [path]` list review comments in the quickfix list. If path is omitted, it uses the current repo root when available, otherwise `cwd`.
@@ -81,7 +81,7 @@ end, { desc = "Local Review Picker" })
 
 ## Notes
 
-- The inline comment editor starts in insert mode. `<Enter>` accepts the comment and returns to the buffer in normal mode, `<S-Enter>` inserts a newline, and it closes with `q` in normal mode and `<C-c>` in normal or insert mode by default. Configure the close bindings through `comment_close_keys`, or remove entries to disable them.
+- The inline comment editor starts in insert mode. `<Enter>` inserts a newline, `<Esc>` returns to normal mode, and `<Enter>` in normal mode (or the configured `comment_close_keys`) accepts the comment and closes the editor. By default `q` closes in normal mode and `<C-c>` closes in normal or insert mode.
 - Comments are stored by scope root: repo root when inside git, otherwise the file's parent directory.
 - Export and clear can target either a file or a directory.
 - This was largely vibe-coded. There is likely some poor code and you may find bugs.

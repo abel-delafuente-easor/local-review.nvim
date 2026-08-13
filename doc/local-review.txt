@@ -60,8 +60,8 @@ All fields are optional. Keymaps left nil or empty are not created.
 <                       comments on the selected lines. When a comment
                         already exists on any covered line, it is edited
                         instead. In the editor:
-                          - <CR> accepts and closes
-                          - <S-CR> inserts a newline (insert mode)
+                          - <CR> inserts a newline (insert mode)
+                          - <CR> accepts and closes (normal mode)
                           - keys from `comment_close_keys` accept and close
 
                                                         *:LocalReviewDelete*
@@ -144,9 +144,10 @@ reappears (revert, merge, undo).
 <
 and copies it to the `+` and `*` registers.
 
-WARNING: |:LocalReviewExport| deletes the exported comments afterwards by
-design (the agent consumes them). Use |:LocalReviewExportPreserve| to keep
-them.
+WARNING: |:LocalReviewExport| deletes the exported comments afterwards only
+when the clipboard copy succeeds (or in headless mode, where the output is
+printed to stdout). Use |:LocalReviewExportPreserve| to keep them.
+If both registers fail, the comments are kept and an error is shown.
 
 ==============================================================================
 8. HIGHLIGHTS                                         *local-review-highlights*

@@ -94,6 +94,23 @@ function M.setup(opts)
   -- is orange in most colorschemes; override with :highlight to customize.
   vim.api.nvim_set_hl(0, "LocalReviewEditorTitle", { link = "Number", default = true })
 
+  local function jump_and_echo(direction)
+    local comments = require("local_review.comments")
+    comments.jump(direction)
+    local line = vim.api.nvim_win_get_cursor(0)[1]
+    local line_state = comments.get_line_state(0, line)
+    if not line_state or not line_state.comment then
+      return
+    end
+    local body = line_state.comment.body or ""
+    local summary = vim.trim(body:gsub("%s+", " "))
+    if #summary > 80 then
+      summary = summary:sub(1, 80) .. "..."
+    end
+    local stale_suffix = line_state.comment.stale and " [stale]" or ""
+    vim.api.nvim_echo({ { summary .. stale_suffix, "Normal" } }, true, {})
+  end
+
   if not state.configured then
     command("LocalReviewComment", function(command_opts)
       local range
@@ -104,15 +121,21 @@ function M.setup(opts)
     end, { range = true })
 
     command("LocalReviewDelete", function()
-      require("local_review.comments").delete_current_line()
+      local comments = require("local_review.comments")
+      local line = vim.api.nvim_win_get_cursor(0)[1]
+      local line_state = comments.get_line_state(0, line)
+      if line_state and line_state.comment then
+        vim.fn.setreg('"', line_state.comment.body)
+      end
+      comments.delete_current_line()
     end, {})
 
     command("LocalReviewNext", function()
-      require("local_review.comments").jump(1)
+      jump_and_echo(1)
     end, {})
 
     command("LocalReviewPrev", function()
-      require("local_review.comments").jump(-1)
+      jump_and_echo(-1)
     end, {})
 
     command("LocalReviewExport", function(command_opts)

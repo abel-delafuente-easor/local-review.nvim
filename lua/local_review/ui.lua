@@ -340,16 +340,13 @@ local function set_editor_keymaps(bufnr)
     end, "Local Review: Close")
   end
 
-  -- <CR> accepts the comment; <S-CR> inserts a newline.
-  vim.keymap.set({ "n", "i" }, "<CR>", function()
+  -- Normal-mode <CR> accepts the comment; insert-mode <CR> keeps its default
+  -- newline behavior so multi-line comments work in every terminal.
+  vim.keymap.set("n", "<CR>", function()
     if M.close_active() then
       vim.cmd("stopinsert")
     end
   end, { buffer = bufnr, silent = true, desc = "Local Review: Accept" })
-  vim.keymap.set("i", "<S-CR>", function()
-    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, true, true), "ni", false)
-    return ""
-  end, { buffer = bufnr, expr = true, desc = "Local Review: Newline" })
 end
 
 local function attach_editor_autocmds(bufnr, winid)

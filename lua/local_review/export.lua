@@ -71,11 +71,12 @@ function M.open_export(path, opts)
     return
   end
 
+  local copied = false
   if #vim.api.nvim_list_uis() == 0 then
     -- Headless runs (e.g. skills) still need stdout output.
     io.write(text .. "\n")
+    copied = true
   else
-    local copied = false
     for _, reg in ipairs({ "+", "*" }) do
       local ok = pcall(vim.fn.setreg, reg, text)
       if ok then
@@ -89,11 +90,14 @@ function M.open_export(path, opts)
         vim.log.levels.INFO
       )
     else
-      vim.notify("Failed to copy review comments to the system clipboard.", vim.log.levels.ERROR)
+      vim.notify(
+        "Failed to copy review comments to the system clipboard; comments were kept.",
+        vim.log.levels.ERROR
+      )
     end
   end
 
-  if opts and opts.clear_after_export and comment_count > 0 then
+  if opts and opts.clear_after_export and comment_count > 0 and copied then
     comments.clear_path(export_path, { silent = true })
   end
 end
